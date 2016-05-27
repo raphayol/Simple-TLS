@@ -1,0 +1,11 @@
+TODO :
+  Server : encrypt and hash a file using pycrypto
+  Server : send encrypted data file and hash
+  Client : verify encrypted data file and hash and save
+  Server : clean exit
+  complete Readme
+
+Improvement :
+  Options : host, port, help
+  Cypher negotiation
+  Non-blocking sockets
