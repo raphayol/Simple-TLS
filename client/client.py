@@ -1,6 +1,9 @@
 #! /usr/bin/env python
 
-import socket, ssl, sys
+import argparse
+import socket
+import ssl
+import sys
 
 class Client:
     def __init__(self, host, port):
@@ -30,17 +33,24 @@ class Client:
         )
 
         try:
-            conn.connect(("192.168.1.13", 443))
+            conn.connect((self.host, self.port))
         except ssl.SSLError, (value, message):
             print message
             print "Exiting"
             sys.exit(value)
 
-        conn.send('AaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaGET filename')
-        cert = conn.getpeercert()
-        print cert
+        conn.send('GET filenam')
+        data = conn.recv(1024)
+        print 'data received : ' + data
 
 if __name__ == "__main__":
-    c = Client('192.168.1.13', 443)
+    parser = argparse.ArgumentParser(
+            description = 'TLS Client - Send a GET filename request',
+            formatter_class = argparse.ArgumentDefaultsHelpFormatter
+    )
+    parser.add_argument('-hostname', default = '127.0.0.1', help = ' ')
+    parser.add_argument('-port', default = 443, type = int, help = ' ')
+    args = parser.parse_args()
+    c = Client(args.hostname, args.port)
     c.connec()
 

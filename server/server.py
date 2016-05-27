@@ -1,6 +1,8 @@
 #! /usr/bin/env python
 
-import socket, ssl
+import argparse
+import socket
+import ssl
 
 class Server:
     def __init__(self, host, port):
@@ -33,25 +35,19 @@ class Server:
         print context
 
     def deal_with_client(self, connstream):
-
-        print 'peer cert : '
-        print connstream.getpeercert()
         data = connstream.recv(1024)
-        # null data means the client is finished with us
         print "new client"
-        print 'data : ' + data
-
-        #if data:
-             # we'll assume do_something returns False
-             # when we're finished with client
-        #     data = connstream.recv(1024)
+        print 'data received : ' + data
+        # null data means the client is finished with us
+        if data == 'GET filename':
+            connstream.send("encrypted file")
         # finished with client
 
 
     def run(self):
         bindsocket = socket.socket()
         bindsocket.bind((self.host, self.port))
-        bindsocket.listen(5)
+        bindsocket.listen(16)
 
         while True:
             newsocket, fromaddr = bindsocket.accept()
@@ -60,7 +56,7 @@ class Server:
                                                       server_side = True)
             except ssl.SSLError, (value, message):
                 print message
-                print 'This client was ignored'
+                print 'Connexion with client closed'
                 continue
 
             try:
@@ -74,6 +70,13 @@ class Server:
                 connstream.close()
 
 if __name__ == "__main__":
-    s = Server('192.168.1.13', 443)
+    parser = argparse.ArgumentParser(
+            description = 'TLS Server - Respond on GET filename request',
+            formatter_class = argparse.ArgumentDefaultsHelpFormatter
+    )
+    parser.add_argument('-hostname', default = '127.0.0.1', help = ' ')
+    parser.add_argument('-port', default = 443, type = int, help = ' ')
+    args = parser.parse_args()
+    s = Server(args.hostname, args.port)
     s.run()
 
