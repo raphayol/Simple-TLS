@@ -1,8 +1,10 @@
 #! /usr/bin/env python
 
 import argparse
+import os
 import socket
 import ssl
+import sys
 
 class Server:
     def __init__(self, host, port):
@@ -43,7 +45,6 @@ class Server:
             connstream.send("encrypted file")
         # finished with client
 
-
     def run(self):
         bindsocket = socket.socket()
         bindsocket.bind((self.host, self.port))
@@ -69,13 +70,26 @@ class Server:
                 connstream.shutdown(socket.SHUT_RDWR)
                 connstream.close()
 
+def def_path(path_file):
+    path = os.path.dirname(sys.argv[0])
+    if path == '':
+        path = os.curdir
+    return os.path.normpath(os.path.join(path, path_file))
+
 if __name__ == "__main__":
+    ca = def_path('../ca_cert/minissl-ca.pem')
+    cert = def_path('minissl-server.pem')
+    key = def_path('minissl-server.key.pem')
+
     parser = argparse.ArgumentParser(
             description = 'TLS Server - Respond on GET filename request',
             formatter_class = argparse.ArgumentDefaultsHelpFormatter
     )
-    parser.add_argument('-hostname', default = '127.0.0.1', help = ' ')
-    parser.add_argument('-port', default = 443, type = int, help = ' ')
+    parser.add_argument('--hostname', default = '127.0.0.1', help = ' ')
+    parser.add_argument('--port', default = 443, type = int, help = ' ')
+    parser.add_argument('--ca', default = ca, help = ' ')
+    parser.add_argument('--cert', default = cert, help = ' ')
+    parser.add_argument('--key', default = key, help = ' ')
     args = parser.parse_args()
     s = Server(args.hostname, args.port)
     s.run()
