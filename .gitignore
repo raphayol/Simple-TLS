@@ -1,2 +1,4 @@
 *.pdf
 *.pem
+server/store
+client/stock
