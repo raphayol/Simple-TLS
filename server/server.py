@@ -69,11 +69,9 @@ class Server:
             ssl_socket.send(block)
             digester.update(block)
         f.close()
-
         # Send end of file signal
         ssl_socket.send('END')
         ssl_socket.send('END')
-
         # Send HMAC signature for this file
         ssl_socket.send(digester.hexdigest())
         client_report = ssl_socket.recv(BLOCK_SIZE)
@@ -135,7 +133,6 @@ if __name__ == "__main__":
     cert = def_path('minissl-server.pem')
     key = def_path('minissl-server.key.pem')
     store = def_path('store')
-
     parser = argparse.ArgumentParser(
             description = 'TLS Server - Respond on GET filename request',
             formatter_class = argparse.ArgumentDefaultsHelpFormatter
@@ -150,4 +147,3 @@ if __name__ == "__main__":
     s = Server(args.hostname, args.port, args.ca,
                args.cert, args.key, args.store)
     s.run()
-

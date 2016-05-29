@@ -18,7 +18,6 @@ class Client:
         if not os.path.isdir(stock):
             print 'The stock directory %s doesn\'t exist. Exiting' %stock
             sys.exit(1)
-
         self.filename = filename
         self.context = ssl.SSLContext(ssl.PROTOCOL_TLSv1_2)
         # Require a certificate from server
@@ -46,7 +45,6 @@ class Client:
             # If secret == 'NO' : the requested file doesn't exist
             print '%s doesn\'t exist on the server' %self.filename
             return
-
         file_path = self.stock + '/' + self.filename
         # Use oh SHA1 algorithm to hash file content
         digester = hmac.new(secret, '', hashlib.sha1)
@@ -64,7 +62,6 @@ class Client:
             f.write(block)
             digester.update(block)
         f.close()
-
         # Receive HMAC signature for the requested file
         signature = ssl_socket.recv(BLOCK_SIZE)
         # Compare our signature with the one sent by server
@@ -76,7 +73,6 @@ class Client:
             # Contents are different between client and server
             ssl_socket.send('KO')
             print 'Error : digest are not the same' %self.filename
-
 
     def deal_with_server(self):
         ssl_socket = self.context.wrap_socket(socket.socket(socket.AF_INET),
@@ -121,4 +117,3 @@ if __name__ == "__main__":
     c = Client(args.hostname, args.port, args.ca, args.cert,
                args.key, args.stock, args.filename)
     c.deal_with_server()
-
