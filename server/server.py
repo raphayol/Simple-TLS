@@ -8,6 +8,8 @@ import socket
 import ssl
 import sys
 
+import time
+
 def digest_file(filename, secret):
     # Use oh SHA1 algorithm to hash file content
     digester = hmac.new(secret, '', hashlib.sha1)
@@ -28,7 +30,7 @@ class Server:
         self.port = port
         self.store = store
         if not os.path.isdir(store):
-            print "The store directory %s doesn't exist. Exiting" %store
+            print 'The store directory %s doesn\'t exist. Exiting' %store
             sys.exit(1)
 
         self.context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
@@ -50,7 +52,7 @@ class Server:
         self.context.set_ciphers('AES128')
 
     def verify_callback(self, ssl_socket, server_name, context):
-        print "New client HELLO received"
+        print 'New client HELLO received'
 
     def send_file(self, ssl_socket, filename):
         print 'GET %s request received' %filename
@@ -61,23 +63,53 @@ class Server:
             # The requested file is not found on the server
             # TODO Send error message to client
             print 'File doesn\'t exist'
+            ssl_socket.send('NO')
             return
         # Generate random bytes secret used for HMAC
-        secret = os.urandom(64)
+        secret = os.urandom(20)
         # Send secret to client
         ssl_socket.send(secret)
+        # Use oh SHA1 algorithm to hash file content
+        digester = hmac.new(secret, '', hashlib.sha1)
+        f = open(file_path, 'rb')
+        while True:
+            block = f.read(1024)
+            if not block:
+                break
+            ssl_socket.send(block)
+            digester.update(block)
+        f.close()
+
+        ssl_socket.send('END')
+        ssl_socket.send('END')
+        print digester.hexdigest()
+
         # Send HMAC signature for this file
-        ssl_socket.send(digest_file(file_path, secret));
-        print digest_file(file_path, secret);
+        ssl_socket.send(digester.hexdigest())
 
     def deal_with_client(self, ssl_socket):
-        request = ssl_socket.recv(1024).split()
-        # Treate all differents request here
-        # For this example only GET "filename" request are handle
-        if request[0] == 'GET':
-            self.send_file(ssl_socket, request[1])
-        # Null data means the client is finished with us
-        # We have finished with this client now
+        try:
+            # When the TLS handshake has been done : listen client request
+            request = ssl_socket.recv(1024).split()
+            if request == []:
+                # Null data means the client is finished with us
+                return
+            # Treate all differents request here
+            # For this example only GET "filename" request are handle
+            if request[0] == 'GET':
+                self.send_file(ssl_socket, request[1])
+            # We have finished with this client now
+            ssl_socket.shutdown(socket.SHUT_RDWR)
+        except ssl.SSLError, (value, message):
+            print 'Error dealing with client :\r\n\t%s' %message
+        except socket.error, (value, message):
+            print 'Error dealing with client :\r\n\t%s' %message
+        except:
+            print 'Unknow error dealing with client'
+        print 'Connexion with client closed'
+        ssl_socket.close()
+
+
 
     def run(self):
         bindsocket = socket.socket()
@@ -96,15 +128,8 @@ class Server:
                 print 'Connexion with client closed'
                 continue
 
-            try:
-                # When the TLS handshake has been done : listen client request
-                self.deal_with_client(ssl_socket)
-            except ssl.SSLError, (value, message):
-                print "Error dealing with client :\r\n\t" + message
-            finally:
-                print 'Connexion with client closed'
-                ssl_socket.shutdown(socket.SHUT_RDWR)
-                ssl_socket.close()
+            self.deal_with_client(ssl_socket)
+
 
 def def_path(path_file):
     path = os.path.dirname(sys.argv[0])

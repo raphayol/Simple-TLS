@@ -8,4 +8,5 @@ Usefull documentation :
 Possible improvements :
   Cypher negotiation
   Non-blocking sockets
+  Error recovery
 

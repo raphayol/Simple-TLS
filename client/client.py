@@ -27,8 +27,13 @@ class Client:
         self.host = host
         self.port = port
         self.stock = stock
+        if not os.path.isdir(stock):
+            print 'The stock directory %s doesn\'t exist. Exiting' %stock
+            sys.exit(1)
+
         self.filename = filename
         self.context = ssl.SSLContext(ssl.PROTOCOL_TLSv1_2)
+        # Require a certificate from server
         self.context.verify_mode = ssl.CERT_REQUIRED
         self.context.check_hostname = True
         # Set CA location in order to check server certificates
@@ -46,6 +51,24 @@ class Client:
         ssl_socket.send('GET ' + self.filename)
         # Receive secret use for HMAC from server
         secret = ssl_socket.recv(1024)
+        if secret == 'NO':
+            # If secret == 'NO' : the requested file doesn't exist
+            print '%s doesn\'t exist on the server' %self.filename
+            return
+
+        file_path = self.stock + '/' + self.filename
+        f = open(file_path, 'w+')
+        while True:
+            block = ssl_socket.recv(1024)
+            if block == 'END':
+                if not ssl_socket.recv(1024) == 'END':
+                    ssl_socket.recv(1024)
+                    f.write(block)
+                break
+            f.write(block)
+            print block
+        f.close()
+
         # Receive HMAC signature for the requested file
         signature = ssl_socket.recv(1024)
         # Debug
@@ -61,11 +84,11 @@ class Client:
         try:
             # Try to connect to the server
             ssl_socket.connect((self.host, self.port))
-            print 'connected to ' + self.host + ':' + str(self.port)
+            print 'connected to %s:%d' %(self.host, self.port)
             # Send a Get request in order to received the file
             self.get_file(ssl_socket)
         except ssl.SSLError, (value, message):
-            print "Error dealing with server :\r\n\t" + message
+            print 'Error dealing with server :\r\n\t%s' %message
         finally:
             print 'Connexion with server closed'
             ssl_socket.shutdown(socket.SHUT_RDWR)
@@ -81,7 +104,7 @@ if __name__ == "__main__":
     ca = def_path('../ca_cert/minissl-ca.pem')
     cert = def_path('minissl-client.pem')
     key = def_path('minissl-client.key.pem')
-    stock = def_path('store/minissl-client.key.pem')
+    stock = def_path('stock')
 
     parser = argparse.ArgumentParser(
             description = 'TLS Client - Send a GET filename request',
