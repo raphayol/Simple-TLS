@@ -8,19 +8,7 @@ import socket
 import ssl
 import sys
 
-def digest_file(filename, secret):
-    # Use oh SHA1 algorithm to hash file content
-    digester = hmac.new(secret, '', hashlib.sha1)
-    f = open(filename, 'rb')
-    try:
-        while True:
-            block = f.read(1024)
-            if not block:
-                break
-            digester.update(block)
-    finally:
-        f.close()
-    return digester.hexdigest()
+BLOCK_SIZE = 1024
 
 class Client:
     def __init__(self, host, port, ca, cert, key, stock, filename):
@@ -35,7 +23,10 @@ class Client:
         self.context = ssl.SSLContext(ssl.PROTOCOL_TLSv1_2)
         # Require a certificate from server
         self.context.verify_mode = ssl.CERT_REQUIRED
-        self.context.check_hostname = True
+        # Put this value to True if you use a known howtsname (not an ip)
+        # and if you want to check that this hostname matchs the server
+        # certificate
+        self.context.check_hostname = False
         # Set CA location in order to check server certificates
         self.context.load_verify_locations(ca)
         try:
@@ -50,37 +41,46 @@ class Client:
     def get_file(self, ssl_socket):
         ssl_socket.send('GET ' + self.filename)
         # Receive secret use for HMAC from server
-        secret = ssl_socket.recv(1024)
+        secret = ssl_socket.recv(BLOCK_SIZE)
         if secret == 'NO':
             # If secret == 'NO' : the requested file doesn't exist
             print '%s doesn\'t exist on the server' %self.filename
             return
 
         file_path = self.stock + '/' + self.filename
+        # Use oh SHA1 algorithm to hash file content
+        digester = hmac.new(secret, '', hashlib.sha1)
+        # Receive file content by block
+        # compute HMAC signature to verify file content
         f = open(file_path, 'w+')
         while True:
-            block = ssl_socket.recv(1024)
+            block = ssl_socket.recv(BLOCK_SIZE)
             if block == 'END':
-                if not ssl_socket.recv(1024) == 'END':
-                    ssl_socket.recv(1024)
+                if not ssl_socket.recv(BLOCK_SIZE) == 'END':
+                    ssl_socket.recv(BLOCK_SIZE)
                     f.write(block)
+                    digester.update(block)
                 break
             f.write(block)
-            print block
+            digester.update(block)
         f.close()
 
         # Receive HMAC signature for the requested file
-        signature = ssl_socket.recv(1024)
-        # Debug
-        print signature
-        print digest_file('server/store/' + self.filename, secret)
+        signature = ssl_socket.recv(BLOCK_SIZE)
+        # Compare our signature with the one sent by server
+        if signature == digester.hexdigest():
+            # We got the good file content
+            ssl_socket.send('OK')
+            print 'File %s well received' %self.filename
+        else:
+            # Contents are different between client and server
+            ssl_socket.send('KO')
+            print 'Error : digest are not the same' %self.filename
+
 
     def deal_with_server(self):
-        ssl_socket = self.context.wrap_socket(
-                socket.socket(socket.AF_INET),
-                #TODO change default hostname
-                server_hostname = 'minissl-SERVER'
-                )
+        ssl_socket = self.context.wrap_socket(socket.socket(socket.AF_INET),
+                                              server_hostname = self.host)
         try:
             # Try to connect to the server
             ssl_socket.connect((self.host, self.port))

@@ -7,22 +7,11 @@ import os
 import socket
 import ssl
 import sys
+import threading
 
-import time
-
-def digest_file(filename, secret):
-    # Use oh SHA1 algorithm to hash file content
-    digester = hmac.new(secret, '', hashlib.sha1)
-    f = open(filename, 'rb')
-    try:
-        while True:
-            block = f.read(1024)
-            if not block:
-                break
-            digester.update(block)
-    finally:
-        f.close()
-    return digester.hexdigest()
+BLOCK_SIZE = 1024
+NB_MAX_CLIENT = 16
+CIPHERS = 'AES128'
 
 class Server:
     def __init__(self, host, port, ca, cert, key, store):
@@ -32,7 +21,6 @@ class Server:
         if not os.path.isdir(store):
             print 'The store directory %s doesn\'t exist. Exiting' %store
             sys.exit(1)
-
         self.context = ssl.create_default_context(ssl.Purpose.CLIENT_AUTH)
         # Set CA location in order to check client certificates
         self.context.load_verify_locations(ca)
@@ -49,7 +37,7 @@ class Server:
         except ssl.SSLError, (value, message):
             print message
             sys.exit(value)
-        self.context.set_ciphers('AES128')
+        self.context.set_ciphers(CIPHERS)
 
     def verify_callback(self, ssl_socket, server_name, context):
         print 'New client HELLO received'
@@ -59,9 +47,9 @@ class Server:
         # TODO verify filename (alphanumeric and present on server)
         # We can admit here that the requested file is already encrypted
         file_path = self.store + '/' + filename
-        if not os.path.isfile(file_path):
+        # For security purpose filename must be alpha-nunmeric
+        if (not os.path.isfile(file_path) or not filename.isalnum()):
             # The requested file is not found on the server
-            # TODO Send error message to client
             print 'File doesn\'t exist'
             ssl_socket.send('NO')
             return
@@ -71,26 +59,33 @@ class Server:
         ssl_socket.send(secret)
         # Use oh SHA1 algorithm to hash file content
         digester = hmac.new(secret, '', hashlib.sha1)
+        # Send file content by block
+        # compute HMAC for this file
         f = open(file_path, 'rb')
         while True:
-            block = f.read(1024)
+            block = f.read(BLOCK_SIZE)
             if not block:
                 break
             ssl_socket.send(block)
             digester.update(block)
         f.close()
 
+        # Send end of file signal
         ssl_socket.send('END')
         ssl_socket.send('END')
-        print digester.hexdigest()
 
         # Send HMAC signature for this file
         ssl_socket.send(digester.hexdigest())
+        client_report = ssl_socket.recv(BLOCK_SIZE)
+        if client_report == 'OK':
+            print 'File %s well received by client' %filename
+        else:
+            print 'File %s not received by client' %filename
 
     def deal_with_client(self, ssl_socket):
         try:
             # When the TLS handshake has been done : listen client request
-            request = ssl_socket.recv(1024).split()
+            request = ssl_socket.recv(BLOCK_SIZE).split()
             if request == []:
                 # Null data means the client is finished with us
                 return
@@ -109,13 +104,10 @@ class Server:
         print 'Connexion with client closed'
         ssl_socket.close()
 
-
-
     def run(self):
         bindsocket = socket.socket()
         bindsocket.bind((self.host, self.port))
-        bindsocket.listen(16)
-
+        bindsocket.listen(NB_MAX_CLIENT)
         while True:
             # Waiting for clients here
             newsocket, fromaddr = bindsocket.accept()
@@ -127,9 +119,10 @@ class Server:
                 print message
                 print 'Connexion with client closed'
                 continue
-
-            self.deal_with_client(ssl_socket)
-
+            # Treate client in a new thread
+            t = threading.Thread(target=self.deal_with_client,
+                                 args=([ssl_socket]))
+            t.start()
 
 def def_path(path_file):
     path = os.path.dirname(sys.argv[0])
